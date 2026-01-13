@@ -1,3 +1,4 @@
+// api包 - OpenIM服务器API层实现
 package api
 
 import (
@@ -32,13 +33,16 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// 压缩级别常量定义
 const (
-	NoCompression      = -1
-	DefaultCompression = 0
-	BestCompression    = 1
-	BestSpeed          = 2
+	NoCompression      = -1 // 不压缩
+	DefaultCompression = 0  // 默认压缩
+	BestCompression    = 1  // 最高压缩比
+	BestSpeed          = 2  // 最高压缩速度
 )
 
+// prommetricsGin Prometheus监控中间件
+// 功能：记录HTTP请求和API调用指标
 func prommetricsGin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
@@ -54,48 +58,69 @@ func prommetricsGin() gin.HandlerFunc {
 	}
 }
 
+// newGinRouter 创建Gin路由引擎
+// 参数：
+//   - ctx: 上下文
+//   - client: 服务发现客户端
+//   - cfg: API配置
+//
+// 返回值：
+//   - *gin.Engine: Gin引擎实例
+//   - error: 错误信息
+//
+// 功能：初始化Gin引擎，设置中间件，注册API路由
 func newGinRouter(ctx context.Context, client discovery.SvcDiscoveryRegistry, cfg *Config) (*gin.Engine, error) {
-	authConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Auth)
+	// 建立与各RPC服务的连接
+	authConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Auth) // 认证服务连接
 	if err != nil {
 		return nil, err
 	}
-	userConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.User)
+	userConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.User) // 用户服务连接
 	if err != nil {
 		return nil, err
 	}
-	groupConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Group)
+	groupConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Group) // 群组服务连接
 	if err != nil {
 		return nil, err
 	}
-	friendConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Friend)
+	friendConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Friend) // 好友服务连接
 	if err != nil {
 		return nil, err
 	}
-	conversationConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Conversation)
+	conversationConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Conversation) // 会话服务连接
 	if err != nil {
 		return nil, err
 	}
-	thirdConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Third)
+	thirdConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Third) // 第三方服务连接
 	if err != nil {
 		return nil, err
 	}
-	msgConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Msg)
+	msgConn, err := client.GetConn(ctx, cfg.Discovery.RpcService.Msg) // 消息服务连接
 	if err != nil {
 		return nil, err
 	}
+
+	// 设置Gin模式为生产模式
 	gin.SetMode(gin.ReleaseMode)
+
+	// 创建Gin引擎实例
 	r := gin.New()
+
+	// 注册自定义验证器
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		_ = v.RegisterValidation("required_if", RequiredIf)
 	}
+
+	// 根据配置设置压缩中间件
 	switch cfg.API.Api.CompressionLevel {
 	case NoCompression:
+		// 不使用压缩
 	case DefaultCompression:
-		r.Use(gzip.Gzip(gzip.DefaultCompression))
+		r.Use(gzip.Gzip(gzip.DefaultCompression)) // 默认压缩
 	case BestCompression:
-		r.Use(gzip.Gzip(gzip.BestCompression))
+		r.Use(gzip.Gzip(gzip.BestCompression)) // 最高压缩比
 	case BestSpeed:
-		r.Use(gzip.Gzip(gzip.BestSpeed))
+		r.Use(gzip.Gzip(gzip.BestSpeed)) // 最高压缩速度
 	}
 
 	// Use rate limiter middleware
