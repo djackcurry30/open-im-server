@@ -131,7 +131,34 @@ func (u *UserMgo) PageFindUserWithKeyword(
 }
 
 func (u *UserMgo) GetAllUserID(ctx context.Context, pagination pagination.Pagination) (int64, []string, error) {
-	return mongoutil.FindPage[string](ctx, u.coll, bson.M{}, pagination, options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1}))
+	if pagination == nil {
+		return 0, nil, nil
+	}
+
+	count, err := mongoutil.Count(ctx, u.coll, bson.M{})
+	if err != nil {
+		return 0, nil, err
+	}
+	if count == 0 {
+		return 0, nil, nil
+	}
+
+	skip := int64(pagination.GetPageNumber()-1) * int64(pagination.GetShowNumber())
+	if skip < 0 || skip >= count || pagination.GetShowNumber() <= 0 {
+		return 0, nil, nil
+	}
+
+	pipeline := []bson.M{
+		{"$skip": skip},
+		{"$limit": int64(pagination.GetShowNumber())},
+		{"$project": bson.M{"_id": 0, "user_id": 1}},
+	}
+
+	userIDs, err := mongoutil.Aggregate[string](ctx, u.coll, pipeline)
+	if err != nil {
+		return 0, nil, err
+	}
+	return count, userIDs, nil
 }
 
 func (u *UserMgo) Exist(ctx context.Context, userID string) (exist bool, err error) {
